@@ -1,9 +1,10 @@
+import os
 import fishfarm
 import vllm
 from fishfarm.models.vllm_model import VLLMModel
 from fishfarm.tasks.evalplus import EvalplusTask, load_dataset
 
-from .base import CODE_PROMPT, Task, get_download_dir
+from .base import CODE_PROMPT, MERGELM_CODE_PROMPT, Task, get_download_dir
 
 
 class Mbpp2Task(Task):
@@ -13,6 +14,7 @@ class Mbpp2Task(Task):
         self.model_to_template = {
             "meta-llama/Meta-Llama-3-8B-Instruct": CODE_PROMPT,
             "mistralai/Mistral-7B-Instruct-v0.3": CODE_PROMPT,
+            "layoric/llama-2-13b-code-alpaca": MERGELM_CODE_PROMPT,
         }
         self.system_msg = (
             "You are an exceptionally intelligent coding assistant that "
@@ -98,9 +100,10 @@ class Mbpp2Task(Task):
         model = vllm.LLM(
             model_id,
             max_model_len=1024,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=0.7,
             enforce_eager=True,
             dtype="bfloat16",
+            tensor_parallel_size=len(os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")),
             # download_dir=get_download_dir(),
         )
         chat_template = self.model_to_template[model_id]

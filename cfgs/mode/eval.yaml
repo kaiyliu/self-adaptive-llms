@@ -10,6 +10,7 @@ experts_path_dict:
   math: null
   reasoning: null
   other: null
+  ori_model: null
 
 wandb_project: T^2_eval
 wandb_group_name: ${exp_name}

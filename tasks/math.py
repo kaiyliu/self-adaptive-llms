@@ -1,3 +1,4 @@
+import os
 from typing import Tuple
 
 import fishfarm
@@ -91,10 +92,10 @@ class MathTask(Task):
         model = vllm.LLM(
             model_id,
             max_model_len=2048,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=0.7,
             enforce_eager=True,
             dtype="bfloat16",
-            # download_dir=get_download_dir(),
+            tensor_parallel_size=len(os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")),
         )
         chat_template = self.model_to_template[model_id]
         # This may change with vLLM versions.

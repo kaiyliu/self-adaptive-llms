@@ -1,6 +1,6 @@
 playground*
 wandb
-results
+results*
 results_eval
 saved_models
 outputs

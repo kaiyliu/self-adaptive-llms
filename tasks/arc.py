@@ -5,6 +5,7 @@ from fishfarm.models.vllm_model import VLLMModel
 from fishfarm.tasks.ai2_arc import Ai2ArcSample, Ai2ArcTask
 
 from .base import LLAMA3_COT, Task, get_download_dir
+import os
 
 choices = ["A", "B", "C", "D", "E"]
 
@@ -121,9 +122,10 @@ class AI2ArcTask(Task):
         model = vllm.LLM(
             model_id,
             max_model_len=1024,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=0.7,
             enforce_eager=True,
             dtype="bfloat16",
+            tensor_parallel_size=len(os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")),
             # download_dir=get_download_dir(),
         )
         chat_template = self.model_to_template[model_id]

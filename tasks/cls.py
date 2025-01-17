@@ -1,3 +1,4 @@
+import os
 import re
 from dataclasses import dataclass
 from typing import Iterable, Tuple
@@ -232,9 +233,10 @@ class ClsTask(Task):
         model = vllm.LLM(
             model_id,
             max_model_len=2048,
-            gpu_memory_utilization=0.8,
+            gpu_memory_utilization=0.7,
             enforce_eager=True,
             dtype="bfloat16",
+            tensor_parallel_size=len(os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")),
             # download_dir=get_download_dir(),
         )
         chat_template = self.model_to_template[model_id]

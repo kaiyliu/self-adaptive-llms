@@ -53,6 +53,40 @@ CODE_PROMPT = r"""
 )
 
 
+MERGELM_CODE_PROMPT = r"""
+{% if messages[0]['role'] == 'system' %}
+    {% set loop_messages = messages[1:] %}
+    {% set system_message = 'Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n' %}
+{% else %}
+    {% set loop_messages = messages %}
+    {% set system_message = 'Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n' %}
+{% endif %}
+
+{{ system_message }}
+{% for message in loop_messages %}
+    {% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}
+        {{ raise_exception(
+            'Conversation roles must alternate user/assistant/user/assistant/...')}}
+    {% endif %}
+
+    {% if message['role'] == 'user' %}
+        {{ '\#\#\# Instruction:\n' + 'Create a Python script for this problem:\n' +  message['content'].strip() + '\n\n' }}
+    {% elif message['role'] == 'assistant' %}
+        {{ '\#\#\# Response:\n' + message['content'].strip() }}
+    {% endif %}
+
+    {% if loop.last and message['role'] == 'user' and add_generation_prompt %}
+        {{ '\#\#\# Response:' }}
+    {% endif %}
+{% endfor %}
+""".replace(
+    "    ", ""
+).replace(
+    "\n", ""
+)
+
+
+
 def get_download_dir():
     return "/home/liukaiyuan/project/self-adaptive-llms/.cache"
     # if "HF_HOME" in os.environ:

@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from logging_utils import get_mean_std_max_min_dict
 from utils import (backward, eval_model, forward, load_base_params,
@@ -159,7 +160,7 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
 
         # 6. 计算policy gradient
         print("Computing the policy gradient...")
-        for j, prompt in enumerate(prompts):
+        for j, prompt in enumerate(tqdm(prompts)):
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(gpu)
             prompt_length = input_ids.shape[-1]
             output_ids = tokenizer(

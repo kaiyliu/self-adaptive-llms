@@ -18,6 +18,8 @@ from tasks import Task
 from utils import (eval_model, eval_model_experts_prompt_based, forward,
                    load_hf_params_to_vllm)
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
 def wandb_init(cfg, run_name: str, group_name: str, log_dir: str):
     import wandb
@@ -101,6 +103,117 @@ def main(cfg):
         log_dir = f"{cfg.out_dir}/{task_name}/{policy_name}/{exp_name}/{run_name}"
         group_name = cfg.wandb_group_name
     os.makedirs(log_dir, exist_ok=True)
+
+
+    # 测试原本的模型
+    if cfg.experts_path_dict is not None and cfg.experts_path_dict.ori_model is not None:
+        log_dir = f"{cfg.out_dir}/{task_name}/{policy_name}/{exp_name}/{cfg.experts_path_dict.ori_model}"
+        os.makedirs(log_dir, exist_ok=True)
+        vllm_model = task_loader.get_vllm_model(model_id=cfg.experts_path_dict.ori_model)
+        assert test_only and not prompt_based_eval, f"Cannot test on ori model, test_only is [{test_only}] and prompt_based_eval is [{prompt_based_eval}]"
+
+        train_eval, *test_evals = task_loader.get_evaluator()
+        if task_loader.has_transfer_split:
+            test_eval, transfer_eval = test_evals
+        else:
+            test_eval = test_evals[0]
+
+        train_data, train_ix, valid_ix = task_loader.get_train_data()
+        gpu = torch.device("cuda:1")
+        np_random = np.random.RandomState(seed)
+
+        # cpu + float32 for initial SVD decomposition
+        # Load model and tokenizer.
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, device_map="auto", torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        base_params = model.state_dict()
+
+        original_model_params = {
+            k: v.clone().detach().cpu() for k, v in base_params.items() if "mlp" in k
+        }
+
+        device_map = {name: param.device for name, param in base_params.items()}
+        decomposed_params = {}
+        for k, v in decomposed_params.items():
+            k_name = '.'.join(k.split(".")[:-1])
+            decomposed_params[k] = v.to(torch.bfloat16).to(device_map[k_name])
+        
+        if cfg.wandb_log:
+            wandb = wandb_init(
+                cfg=cfg, group_name=group_name, run_name=run_name, log_dir=log_dir
+            )
+
+        if resuming_from_ckpt and os.path.exists(load_ckpt):
+            print(f"Starting from checkpoint at: {load_ckpt}")
+            # load the lora weight
+            if use_lora:
+                assert os.path.isdir(load_ckpt), "ckpt for lora must be dir to lora adapter"
+                from peft import PeftModel
+
+                lora_model = PeftModel.from_pretrained(model, load_ckpt)
+                merged_model = lora_model.merge_and_unload()
+                new_params = merged_model.state_dict()
+            # load svd expert
+            elif "learnable_params" in load_ckpt:
+                learnable_params = torch.load(load_ckpt)
+                for k, v in learnable_params.items():
+                    learnable_params[k] = v.to(gpu)
+                assert test_only
+                new_params = forward(
+                    policy, model, base_params, decomposed_params, learnable_params
+                )
+            else:
+                state_dict = torch.load(load_ckpt, weights_only=True)
+                policy.load_state_dict(state_dict=state_dict)
+                if test_only:
+                    learnable_params = policy.get_learnable_params()
+                new_params = forward(
+                    policy, model, base_params, decomposed_params, learnable_params
+                )
+            load_hf_params_to_vllm(new_params, vllm_model.llm)
+        else:
+            print(f"Starting from the base model as load_ckpt=={load_ckpt}")
+
+        model.eval()
+
+        # Non-adaptive evaluation on train, val, test set.
+        if test_only and not prompt_based_eval:
+            data_dict = {}
+            details_dict = {}
+            if has_training_split:
+                print("[eval train]")
+                train_res = eval_model(vllm_model, train_eval, train_ix)
+                print("[eval valid]")
+                valid_res = eval_model(vllm_model, train_eval, valid_ix)
+                data_dict["train_acc"] = train_res.aggregate_metrics[
+                    task_loader.target_metric_train
+                ]
+                data_dict["valid_acc"] = valid_res.aggregate_metrics[
+                    task_loader.target_metric_valid
+                ]
+                details_dict["train"] = train_res.sample_details
+                details_dict["valid"] = valid_res.sample_details
+            print("[eval test]")
+            test_res = eval_model(vllm_model, test_eval)
+            data_dict["test_acc"] = test_res.aggregate_metrics[
+                task_loader.target_metric_test
+            ]
+            details_dict["test"] = test_res.sample_details
+            if has_transfer_split:
+                print("[eval transfer]")
+                transfer_res = eval_model(vllm_model, transfer_eval)
+                data_dict["transfer_acc"] = transfer_res.aggregate_metrics[
+                    task_loader.target_metric_transfer
+                ]
+                details_dict["transfer"] = transfer_res.sample_details
+            if cfg.wandb_log:
+                wandb.log(data_dict)
+            with open(f"{log_dir}/eval_results.json", "w") as f:
+                json.dump(data_dict, f, indent=4)
+            print(f"Evaluation results: {data_dict}")
+            return
 
     vllm_model = task_loader.get_vllm_model(model_id=model_id)
 

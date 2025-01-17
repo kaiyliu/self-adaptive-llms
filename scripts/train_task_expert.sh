@@ -1,6 +1,6 @@
 # !/bin/bash
 
-for TASK in gsm8k ai2_arc cls; do
+for TASK in mbpp2 gsm8k ai2_arc cls; do
     # Task Selection
     # TASK="mbpp2" # Available options: mbpp2, gsm8k, ai2_arc, cls
 
@@ -12,5 +12,6 @@ for TASK in gsm8k ai2_arc cls; do
         base_model@_global_=llama3i8b \
         task@_global_=$TASK \
         mode@_global_=training \
-        num_iters=$NUM_ITERS ;
+        num_iters=$NUM_ITERS \
+        kl_ref_coeff=0.1
 done

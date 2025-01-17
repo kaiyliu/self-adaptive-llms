@@ -35,61 +35,106 @@ def load_hf_params_to_vllm(param: Dict, llm: vllm.LLM) -> None:
     )
 
     for i in range(num_layers):
-        # Load qkv_proj weights.
-        model_param = model.get_parameter(f"model.layers.{i}.self_attn.qkv_proj.weight")
-        model_param.copy_(
-            torch.cat(
-                [
-                    param[f"model.layers.{i}.self_attn.q_proj.weight"],
-                    param[f"model.layers.{i}.self_attn.k_proj.weight"],
-                    param[f"model.layers.{i}.self_attn.v_proj.weight"],
-                ],
-                dim=0,
+        # single gpu
+        if model.get_parameter(f"model.layers.{i}.self_attn.qkv_proj.weight").shape[0] == torch.cat(
+                    [
+                        param[f"model.layers.{i}.self_attn.q_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.k_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.v_proj.weight"],
+                    ],
+                    dim=0,
+                ).shape[0]:
+            print(f"[load_hf_params_to_vllm] loading single gpu weights for layer {i}")
+            # Load qkv_proj weights.
+            model_param = model.get_parameter(f"model.layers.{i}.self_attn.qkv_proj.weight")
+            model_param.copy_(
+                torch.cat(
+                    [
+                        param[f"model.layers.{i}.self_attn.q_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.k_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.v_proj.weight"],
+                    ],
+                    dim=0,
+                )
+                .to(model_param.dtype)
+                .to(model_param.device)
             )
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
-        # Load gate_up_proj weights.
-        model_param = model.get_parameter(f"model.layers.{i}.mlp.gate_up_proj.weight")
-        model_param.copy_(
-            torch.cat(
-                [
-                    param[f"model.layers.{i}.mlp.gate_proj.weight"],
-                    param[f"model.layers.{i}.mlp.up_proj.weight"],
-                ],
-                dim=0,
+            # Load gate_up_proj weights.
+            model_param = model.get_parameter(f"model.layers.{i}.mlp.gate_up_proj.weight")
+            model_param.copy_(
+                torch.cat(
+                    [
+                        param[f"model.layers.{i}.mlp.gate_proj.weight"],
+                        param[f"model.layers.{i}.mlp.up_proj.weight"],
+                    ],
+                    dim=0,
+                )
+                .to(model_param.dtype)
+                .to(model_param.device)
             )
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
-        # Load o_proj and down_proj weights.
-        model_param = model.get_parameter(f"model.layers.{i}.self_attn.o_proj.weight")
-        model_param.copy_(
-            param[f"model.layers.{i}.self_attn.o_proj.weight"]
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
-        model_param = model.get_parameter(f"model.layers.{i}.mlp.down_proj.weight")
-        model_param.copy_(
-            param[f"model.layers.{i}.mlp.down_proj.weight"]
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
-        # Load layer_norm weights.
-        model_param = model.get_parameter(f"model.layers.{i}.input_layernorm.weight")
-        model_param.copy_(
-            param[f"model.layers.{i}.input_layernorm.weight"]
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
-        model_param = model.get_parameter(
-            f"model.layers.{i}.post_attention_layernorm.weight"
-        )
-        model_param.copy_(
-            param[f"model.layers.{i}.post_attention_layernorm.weight"]
-            .to(model_param.dtype)
-            .to(model_param.device)
-        )
+            # Load o_proj and down_proj weights.
+            model_param = model.get_parameter(f"model.layers.{i}.self_attn.o_proj.weight")
+            model_param.copy_(
+                param[f"model.layers.{i}.self_attn.o_proj.weight"]
+                .to(model_param.dtype)
+                .to(model_param.device)
+            )
+            model_param = model.get_parameter(f"model.layers.{i}.mlp.down_proj.weight")
+            model_param.copy_(
+                param[f"model.layers.{i}.mlp.down_proj.weight"]
+                .to(model_param.dtype)
+                .to(model_param.device)
+            )
+            # Load layer_norm weights.
+            model_param = model.get_parameter(f"model.layers.{i}.input_layernorm.weight")
+            model_param.copy_(
+                param[f"model.layers.{i}.input_layernorm.weight"]
+                .to(model_param.dtype)
+                .to(model_param.device)
+            )
+            model_param = model.get_parameter(
+                f"model.layers.{i}.post_attention_layernorm.weight"
+            )
+            model_param.copy_(
+                param[f"model.layers.{i}.post_attention_layernorm.weight"]
+                .to(model_param.dtype)
+                .to(model_param.device)
+            )
+        # multi gpu
+        else:
+            print(f"[load_hf_params_to_vllm] loading multi gpu weights for layer {i}")
+            weights = []
+            # Load qkv_proj weights.
+            weights.append((f"model.layers.{i}.self_attn.qkv_proj.weight", torch.cat(
+                    [
+                        param[f"model.layers.{i}.self_attn.q_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.k_proj.weight"],
+                        param[f"model.layers.{i}.self_attn.v_proj.weight"],
+                    ],
+                    dim=0,
+                )
+                .to(model_param.dtype)))
+            # Load gate_up_proj weights.
+            weights.append((f"model.layers.{i}.mlp.gate_up_proj.weight", torch.cat(
+                    [
+                        param[f"model.layers.{i}.mlp.gate_proj.weight"],
+                        param[f"model.layers.{i}.mlp.up_proj.weight"],
+                    ],
+                    dim=0,
+                )
+                .to(model_param.dtype)))
+            # Load o_proj and down_proj weights.
+            weights.append((f"model.layers.{i}.self_attn.o_proj.weight", param[f"model.layers.{i}.self_attn.o_proj.weight"]
+                .to(model_param.dtype)))
+            weights.append((f"model.layers.{i}.mlp.down_proj.weight", param[f"model.layers.{i}.mlp.down_proj.weight"]
+                .to(model_param.dtype)))
+            # Load layer_norm weights.
+            weights.append((f"model.layers.{i}.input_layernorm.weight", param[f"model.layers.{i}.input_layernorm.weight"]
+                .to(model_param.dtype)))
+            weights.append((f"model.layers.{i}.post_attention_layernorm.weight", param[f"model.layers.{i}.post_attention_layernorm.weight"]
+                .to(model_param.dtype)))
+
+            model.load_weights(weights)
 
 
 def eval_model(vllm_model, evaluator, ix=None):
@@ -105,6 +150,7 @@ def compose_new_params(
 ):
     """Compose new parameters from decomposed parameters."""
     mm = policy.get_mask(learnable_params[param_name])
+    print(f"[compose_new_params] mm: {mm.device}, U: {decomposed_params[f'{param_name}.U'].device}, S: {decomposed_params[f'{param_name}.S'].device}, V: {decomposed_params[f'{param_name}.V'].device}")
     return (
         decomposed_params[f"{param_name}.U"].to(mm.device)
         @ torch.diag_embed(decomposed_params[f"{param_name}.S"].to(mm.device) * mm)
