@@ -8,3 +8,6 @@ reference_code
 messy_scripts
 *_decomposed_params.pt
 **/__pycache__/
+
+workdir
+.cache

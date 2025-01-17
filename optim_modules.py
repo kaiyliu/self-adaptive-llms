@@ -116,6 +116,7 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
 
         gpu = self.gpu
 
+        # 1. 加载当前batch的问题
         prompts = [
             task_loader.get_prompt(
                 tokenizer,
@@ -125,22 +126,23 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
             )
             for i in batch_ix
         ]
-
         clipped_batch_size = len(prompts)
 
+        # 2. 加载当前参数
         learnable_params = policy.get_learnable_params()
         new_params = forward(
             policy, model, base_params, decomposed_params, learnable_params
         )
-
+        
+        # 3. 加载当前参数到vllm，采样，并计算reward
         print("Loading weights and getting completions with VLLM")
         load_hf_params_to_vllm(new_params, vllm_model.llm)
         res = eval_model(vllm_model, train_eval, batch_ix)
         rewards = self.get_rewards(task_loader=task_loader, res=res)
-
         rw_stats = get_mean_std_max_min_dict(array=rewards, prefix="rewards")
         metrics_to_log.update(**rw_stats)
 
+        # 4. 恢复base，并计算ref_log_probs
         if use_kl_loss:
             with torch.no_grad():
                 load_base_params(model=model, base_params=original_model_params)
@@ -150,10 +152,12 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
                     prompts=prompts,
                     res=res,
                 )
+                # 5. 加载当前参数
                 new_params = forward(
                     policy, model, base_params, decomposed_params, learnable_params
                 )
 
+        # 6. 计算policy gradient
         print("Computing the policy gradient...")
         for j, prompt in enumerate(prompts):
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(gpu)

@@ -106,12 +106,12 @@ def compose_new_params(
     """Compose new parameters from decomposed parameters."""
     mm = policy.get_mask(learnable_params[param_name])
     return (
-        decomposed_params[f"{param_name}.U"]
-        @ torch.diag_embed(decomposed_params[f"{param_name}.S"] * mm)
-        @ decomposed_params[f"{param_name}.V"].T
+        decomposed_params[f"{param_name}.U"].to(mm.device)
+        @ torch.diag_embed(decomposed_params[f"{param_name}.S"].to(mm.device) * mm)
+        @ decomposed_params[f"{param_name}.V"].T.to(mm.device)
     ) * (
-        decomposed_params[f"{param_name}.S"].sum()
-        / (decomposed_params[f"{param_name}.S"] * mm).sum()
+        decomposed_params[f"{param_name}.S"].sum().to(mm.device)
+        / (decomposed_params[f"{param_name}.S"].to(mm.device) * mm).sum()
     )
 
 

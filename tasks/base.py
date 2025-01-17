@@ -54,10 +54,11 @@ CODE_PROMPT = r"""
 
 
 def get_download_dir():
-    if "HF_HOME" in os.environ:
-        return os.environ["HF_HOME"] + "/models"
-    else:
-        return os.path.expanduser("~") + "/.cache/huggingface/models"
+    return "/home/liukaiyuan/project/self-adaptive-llms/.cache"
+    # if "HF_HOME" in os.environ:
+    #     return os.environ["HF_HOME"]
+    # else:
+    #     return os.path.expanduser("~") + "/.cache/huggingface/models"
 
 
 class Task(ABC):

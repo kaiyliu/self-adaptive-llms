@@ -19,11 +19,16 @@ class Policy(nn.Module):
         for k, v in base_params.items():
             # each param initialized with small gaussian noise
             if "mlp" in k:
+                if k in gpu:
+                    cur_gpu = gpu[k]
+                else:
+                    cur_gpu = gpu
+                    
                 self.learnable_params[k] = torch.nn.Parameter(
                     data=(
                         torch.randn(
                             min(v.shape),
-                            device=gpu,
+                            device=cur_gpu,
                             dtype=torch.bfloat16,
                         )
                         * 0.01

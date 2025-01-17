@@ -101,7 +101,7 @@ class Gsm8kTask(Task):
             gpu_memory_utilization=0.8,
             enforce_eager=True,
             dtype="bfloat16",
-            download_dir=get_download_dir(),
+            # download_dir=get_download_dir(),
         )
         chat_template = self.model_to_template[model_id]
         # This may change with vLLM versions.

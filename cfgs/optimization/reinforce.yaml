@@ -16,6 +16,6 @@ max_grad_norm: 1e-3
 lr: 2e-3
 rw_norm: 0
 rw_clip: null
-kl_ref_coeff: 0 
+kl_ref_coeff: 0
 rw_strategy: rN${rw_norm}C${rw_clip}
 optim_name: RL-lr${lr}-mGN${max_grad_norm}-klC${kl_ref_coeff}-r${rw_strategy}

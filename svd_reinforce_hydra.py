@@ -44,7 +44,6 @@ def wandb_init(cfg, run_name: str, group_name: str, log_dir: str):
 @hydra.main(version_base=None, config_path="cfgs", config_name="config")
 def main(cfg):
     """Main function."""
-
     num_iters = cfg.num_iters
     test_interval = cfg.test_interval
 
@@ -123,7 +122,7 @@ def main(cfg):
     else:
         # Load model and tokenizer.
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, device_map="cuda:1", torch_dtype=torch.bfloat16
+            model_id, device_map="auto", torch_dtype=torch.bfloat16
         )
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     base_params = model.state_dict()
@@ -152,9 +151,12 @@ def main(cfg):
         print("Decomposed params found. Loading...")
         assert not extract_svd
         decomposed_params = torch.load(decomposed_param_file)
+        
+    device_map = {name: param.device for name, param in base_params.items()}
     for k, v in decomposed_params.items():
-        decomposed_params[k] = v.to(torch.bfloat16).to(gpu)
-
+        k_name = '.'.join(k.split(".")[:-1])
+        decomposed_params[k] = v.to(torch.bfloat16).to(device_map[k_name])
+    
     if cfg.wandb_log:
         wandb = wandb_init(
             cfg=cfg, group_name=group_name, run_name=run_name, log_dir=log_dir
@@ -164,7 +166,7 @@ def main(cfg):
         cfg.shakeoff_policy,
         base_params=base_params,
         decomposed_params=decomposed_params,
-        gpu=gpu,
+        gpu=device_map,
     )
 
     optimization_algorithm: OptimizationAlgorithm = hydra.utils.instantiate(

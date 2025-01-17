@@ -35,7 +35,6 @@ class WeightedCombination(Policy):
             )
         else:
             raise NotImplementedError
-
         with torch.no_grad():
             for i, load_ckpt in enumerate(params_paths):
                 print(f"Loading checkpoint {i} at {load_ckpt}...")
