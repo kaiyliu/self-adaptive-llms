@@ -406,6 +406,7 @@ def main(cfg):
     else:
         clipped_batch_size = min(batch_size, len(list(train_ix)))
     best_val_acc = 0.0
+    best_test_acc = 0.0
     test_at_best = 0.0
     transfer_at_best = 0.0
     for i in range(num_iters):
@@ -499,10 +500,24 @@ def main(cfg):
                         task_loader.target_metric_transfer
                     ]
                 print("best_val_acc updated")
-                path = f"{log_dir}/policy_params.pt"
+                path = f"{log_dir}/policy_params_best_val_acc_{best_val_acc}.pt"
                 torch.save(policy.state_dict(), path)
                 if save_legacy_params:
-                    torch.save(learnable_params, f"{log_dir}/learnable_params.pt")
+                    torch.save(learnable_params, f"{log_dir}/learnable_params_best_val_acc_{best_val_acc}.pt")
+            
+            # save_test_best
+            if (
+                test_res.aggregate_metrics[task_loader.target_metric_valid]
+                > best_test_acc
+            ):
+                best_test_acc = test_res.aggregate_metrics[
+                    task_loader.target_metric_test
+                ]
+                print("best_test_acc updated")
+                path = f"{log_dir}/policy_params_best_test_acc_{best_test_acc}.pt"
+                torch.save(policy.state_dict(), path)
+                if save_legacy_params:
+                    torch.save(learnable_params, f"{log_dir}/learnable_params_best_test_acc_{best_test_acc}.pt")
 
             path = f"{log_dir}/policy_params_latest.pt"
             torch.save(policy.state_dict(), path)
