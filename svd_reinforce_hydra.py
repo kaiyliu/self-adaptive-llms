@@ -269,10 +269,10 @@ def main(cfg):
     for k, v in decomposed_params.items():
         k_name = '.'.join(k.split(".")[:-1])
         decomposed_params[k] = v.to(torch.bfloat16).to(device_map[k_name])
-    
+
     if cfg.wandb_log:
         wandb = wandb_init(
-            cfg=cfg, group_name=group_name, run_name=run_name, log_dir=log_dir
+            cfg=cfg, group_name=group_name, run_name=group_name + "_" + run_name, log_dir=log_dir
         )
 
     policy: Policy = hydra.utils.instantiate(

@@ -44,7 +44,7 @@ def load_hf_params_to_vllm(param: Dict, llm: vllm.LLM) -> None:
                     ],
                     dim=0,
                 ).shape[0]:
-            print(f"[load_hf_params_to_vllm] loading single gpu weights for layer {i}")
+            # print(f"[load_hf_params_to_vllm] loading single gpu weights for layer {i}")
             # Load qkv_proj weights.
             model_param = model.get_parameter(f"model.layers.{i}.self_attn.qkv_proj.weight")
             model_param.copy_(
@@ -102,7 +102,7 @@ def load_hf_params_to_vllm(param: Dict, llm: vllm.LLM) -> None:
             )
         # multi gpu
         else:
-            print(f"[load_hf_params_to_vllm] loading multi gpu weights for layer {i}")
+            # print(f"[load_hf_params_to_vllm] loading multi gpu weights for layer {i}")
             weights = []
             # Load qkv_proj weights.
             weights.append((f"model.layers.{i}.self_attn.qkv_proj.weight", torch.cat(
@@ -150,7 +150,7 @@ def compose_new_params(
 ):
     """Compose new parameters from decomposed parameters."""
     mm = policy.get_mask(learnable_params[param_name])
-    print(f"[compose_new_params] mm: {mm.device}, U: {decomposed_params[f'{param_name}.U'].device}, S: {decomposed_params[f'{param_name}.S'].device}, V: {decomposed_params[f'{param_name}.V'].device}")
+    # print(f"[compose_new_params] mm: {mm.device}, U: {decomposed_params[f'{param_name}.U'].device}, S: {decomposed_params[f'{param_name}.S'].device}, V: {decomposed_params[f'{param_name}.V'].device}")
     return (
         decomposed_params[f"{param_name}.U"].to(mm.device)
         @ torch.diag_embed(decomposed_params[f"{param_name}.S"].to(mm.device) * mm)
