@@ -24,6 +24,7 @@ def generate(
     n_batches: int = 1,
     n_problems_per_batch: int = 1_000_000_000,
     n_samples_per_problem: int = 1,
+    source_dataset: str = None,
 ) -> List[str]:
     problems_chunked = list(chunked(list(problems), n_problems_per_batch))
     iter = itertools.product(problems_chunked, range(n_batches))
@@ -41,7 +42,7 @@ def generate(
             messages.append(
                 Message(role="assistant_prefill", content=problem.response_prefix)
             )
-            requests.append(GenerationRequest(messages=messages))
+            requests.append(GenerationRequest(messages=messages, task_name=source_dataset))
         completes = model.generate(requests)
         completions = [c.generation for c in completes]
 

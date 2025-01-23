@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 from .base import Policy
 
 
-class WeightedCombination(Policy):
+class MoE(Policy):
     def __init__(
         self,
         base_params,

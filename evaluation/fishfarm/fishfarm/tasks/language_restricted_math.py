@@ -70,7 +70,7 @@ class LanguageRestrictedMathTask(Task):
         for sample in samples:
             messages = list(self.context_messages)
             messages.append(Message(role="user", content=sample.problem))
-            requests.append(GenerationRequest(messages=messages))
+            requests.append(GenerationRequest(messages=messages, task_name="GSM8K"))
 
         sample_details = []
         for sample, result in zip(samples, model.generate(requests)):

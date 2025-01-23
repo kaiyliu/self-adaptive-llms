@@ -9,6 +9,7 @@ from tqdm import tqdm
 from logging_utils import get_mean_std_max_min_dict
 from utils import (backward, eval_model, forward, load_base_params,
                    load_hf_params_to_vllm)
+from evaluation.fishfarm.fishfarm.tasks.base import TaskResult
 
 
 class OptimizationAlgorithm(abc.ABC):
@@ -110,6 +111,7 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
         original_model_params,
         metrics_to_log,
         vllm_model=None,
+        moe_mode=False,
         **kwargs,
     ):
         use_kl_loss = self.use_kl_loss
@@ -138,8 +140,32 @@ class Reinforce(OptimizationAlgorithm, nn.Module):
         # 3. 加载当前参数到vllm，采样，并计算reward
         print("Loading weights and getting completions with VLLM")
         load_hf_params_to_vllm(new_params, vllm_model.llm)
-        res = eval_model(vllm_model, train_eval, batch_ix)
-        rewards = self.get_rewards(task_loader=task_loader, res=res)
+        
+        if moe_mode:
+            rewards = np.zeros(len(batch_ix))
+            res = TaskResult(aggregate_metrics={}, sample_details=[None] * len(batch_ix))
+            batch_cnt_start = 0
+            batch_cnt_end = 0
+            for task_name, train_eval_i in train_eval.items():
+                batch_cnt_end += len(train_eval_i.samples)
+                
+                task_mask = (np.array(batch_ix) >= batch_cnt_start) & (np.array(batch_ix) < batch_cnt_end)
+                task_batch_ix = [batch_ix_i - batch_cnt_start for batch_ix_i in batch_ix if batch_ix_i>=batch_cnt_start and batch_ix_i<batch_cnt_end]
+                # assert len(task_batch_ix) == task_mask.sum()
+                res_i = eval_model(vllm_model, train_eval_i, task_batch_ix)
+                for task_batch_ix_j, res_i_j in zip(task_batch_ix, res_i.sample_details):
+                    list_idx = batch_ix.tolist().index(task_batch_ix_j + batch_cnt_start)
+                    res.sample_details[list_idx] = res_i_j
+                res.aggregate_metrics.update(res_i.aggregate_metrics)
+                rewards[task_mask] = self.get_rewards(task_loader=task_loader, res=res_i)
+                
+                batch_cnt_start = batch_cnt_end
+            # for res_i_j in res.sample_details:
+            #     assert res_i_j is not None
+        else:
+            res = eval_model(vllm_model, train_eval, batch_ix)
+            rewards = self.get_rewards(task_loader=task_loader, res=res)
+            
         rw_stats = get_mean_std_max_min_dict(array=rewards, prefix="rewards")
         metrics_to_log.update(**rw_stats)
 
@@ -240,29 +266,41 @@ class RandomShooting(OptimizationAlgorithm, nn.Module):
         self.optim_ema = optim_ema
         self.re_eval_best = re_eval_best
         self.use_loglikelihood_for_ties = use_loglikelihood_for_ties
-
+        
+        """
+        pop_size: 这是种群的大小，表示在每次优化步骤中将生成的候选解的数量。较大的种群可以提供更多的多样性，但也会增加计算开销。
+        min_trainable_param: 这是可训练参数的最小值，用于限制生成的参数值的下界。确保生成的参数不会低于此值。
+        max_trainable_param: 这是可训练参数的最大值，用于限制生成的参数值的上界。确保生成的参数不会超过此值。
+        optim_ema: 这是优化的指数移动平均（Exponential Moving Average）系数，范围在0到1之间。它用于平滑参数更新，帮助在训练过程中保持稳定性。
+        re_eval_best: 这是一个布尔值，
+        use_loglikelihood_for_ties: 这是一个布尔值，指示在处理多个具有相同性能的候选解时，是否使用对数似然值来决定最佳解。如果为True，则会考虑对数似然值来打破平局
+        """
+        
         self.trainable_params_shapes = [p.shape for p in trainable_params]
         self.trainable_params_nums = [torch.numel(p) for p in trainable_params]
         self.trainable_params_dtype = trainable_params[0].dtype
         self.total_trainable_params = sum(self.trainable_params_nums)
         self.best_idx = 0
 
+        # 定义种群初始值
         initial_values = (
             torch.rand(size=[pop_size, self.total_trainable_params])
             * self.range_trainable_param
-        ) + self.min_trainable_param
+        ) + self.min_trainable_param # shape (pop_size, 3*num_layers)
         init_values_flat = [
             torch.flatten(torch.detach_copy(p.data)) for p in trainable_params
         ]
-        init_soln = torch.concat(init_values_flat, dim=0)
+        init_soln = torch.concat(init_values_flat, dim=0) # shape (3*num_layers,)
+        
+        # 如果需要重新评估最佳解，则将初始值设置为初始解
         if self.re_eval_best:
             initial_values[0] = torch.clone(init_soln)
 
         self.pop_params = nn.Parameter(
             initial_values,
             requires_grad=False,
-        ).cpu()
-        self.best_soln = nn.Parameter(init_soln, requires_grad=False).cpu()
+        ).cpu() # shape (pop_size, 3*num_layers)
+        self.best_soln = nn.Parameter(init_soln, requires_grad=False).cpu() # shape (3*num_layers,)
 
     def compute_logprobs(
         self,
@@ -336,6 +374,8 @@ class RandomShooting(OptimizationAlgorithm, nn.Module):
         self.sample_new_params()
         perf_per_pop = []
         avg_log_likelihoods_per_pop = []
+        
+        # 计算种群中每一个个体的性能，并计算正确回答的log_prob
         for pop_idx in range(self.pop_size):
             pop_idx_params = self.split_and_convert(
                 flat_params=self.pop_params[pop_idx]
@@ -454,6 +494,11 @@ class CEM(RandomShooting):
 
         self.elite_ratio = elite_ratio
         self.num_elites = int(elite_ratio * pop_size)
+        """
+        self.elite_ratio: 这个参数表示在每次优化步骤中，种群中被认为是“精英”的个体所占的比例。精英个体是指在当前种群中表现最好的个体。通过设置这个比例，可以控制在每次迭代中保留多少表现优秀的个体，以便在下一次迭代中使用它们的参数。
+        """
+        
+        # 定义均值和方差
         self.dist_mean = nn.Parameter(
             torch.detach_copy(self.best_soln), requires_grad=False
         ).cpu()
@@ -514,6 +559,7 @@ class CEM(RandomShooting):
             load_hf_params_to_vllm(new_params, vllm_model.llm)
             res = eval_model(vllm_model, train_eval, batch_ix)
             if self.use_loglikelihood_for_ties:
+                # 计算正确回答的log_prob
                 print("Storing log likelihhods")
                 rewards = task_loader.get_rewards(res=res)
                 correct = [int(r > 0) for r in rewards]
@@ -534,7 +580,7 @@ class CEM(RandomShooting):
                         for j, c in enumerate(correct)
                         if c
                     ]
-                    print("lalala, I am hitting the selected_log_probs!")
+                    print(f"[pop_idx {pop_idx}] lalala, I am hitting the selected_log_probs!")
                     selected_log_probs_list = self.compute_logprobs(
                         model=model,
                         tokenizer=tokenizer,
@@ -557,9 +603,12 @@ class CEM(RandomShooting):
         if self.use_loglikelihood_for_ties:
             perf_per_pop_array = np.array(perf_per_pop)
             loglikelihood_array = np.array(avg_log_likelihoods_per_pop)
+            # 找出所有性能最高的个体
             max_perf = perf_per_pop_array == np.max(perf_per_pop_array)
             max_perf_idxs = np.flatnonzero(max_perf)
+            # 找出所有性能最高的个体中，正确回答的log_prob
             max_perf_logprobs = loglikelihood_array[max_perf_idxs]
+            # 找出所有性能最高的个体中，正确回答的log_prob最大的个体
             best_logprob_idx = np.argmax(max_perf_logprobs)
             best_member_idx = max_perf_idxs[best_logprob_idx]
             logprobs_stats = get_mean_std_max_min_dict(
@@ -568,13 +617,17 @@ class CEM(RandomShooting):
             metrics_to_log.update(**logprobs_stats)
         else:
             best_member_idx = np.argmax(perf_per_pop)
-        elite_idxs = np.argpartition(perf_per_pop, -self.num_elites)[-self.num_elites :]
+            
+        # 选择精英个体
+        elite_idxs = np.argpartition(perf_per_pop, -self.num_elites)[-self.num_elites :] # 返回的是精英个体的索引
 
         elite_params = self.pop_params[elite_idxs]
         elite_mean = torch.mean(elite_params, dim=0)
         elite_std = torch.std(elite_params, dim=0)
         self.best_idx = best_member_idx
         best_params = self.pop_params[best_member_idx].cpu()
+        
+        # 更新最佳种群，以及精英种群的均值和方差
         self.best_soln.data.copy_(best_params)
         self.dist_mean.copy_(
             elite_mean.cpu() * (1 - self.optim_ema)
@@ -596,3 +649,5 @@ class CEM(RandomShooting):
             prefix="cem_std",
         )
         metrics_to_log.update(**cem_std_stats)
+
+

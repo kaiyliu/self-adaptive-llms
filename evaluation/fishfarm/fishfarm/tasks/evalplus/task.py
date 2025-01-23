@@ -38,7 +38,7 @@ class EvalplusTask(Task):
             output_path = f"{save_dir}/outputs.jsonl"
 
             completions = generation.generate(
-                model, samples, self.context_messages, output_path
+                model, samples, self.context_messages, output_path, source_dataset=self.source_dataset
             )
 
             if self.source_dataset == "mbpp":

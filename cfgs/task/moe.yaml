@@ -1,0 +1,11 @@
+task_loader:
+  _target_: tasks.Gsm8k_Arc_Mbpp2_Task
+  wrapped_gsm8k_task: 
+    _target_: tasks.Gsm8kTask
+  wrapped_arc_task: 
+    _target_: tasks.AI2ArcTask
+  wrapped_mbpp2_task: 
+    _target_: tasks.Mbpp2Task
+
+task_name: moe
+  

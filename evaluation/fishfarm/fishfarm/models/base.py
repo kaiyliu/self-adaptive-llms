@@ -20,6 +20,8 @@ class GenerationRequest:
 
     max_tokens: Optional[int] = None
     stop: Sequence[str] = ()
+    
+    task_name: Optional[str] = None
 
 
 @dataclass
@@ -28,6 +30,7 @@ class GenerationResult:
     request: GenerationRequest
     generation: str
 
+    task_name: Optional[str] = None
 
 @dataclass
 class NLLRequest:

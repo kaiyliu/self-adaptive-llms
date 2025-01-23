@@ -29,7 +29,7 @@ cd self-adaptive-llms
 conda create -n t2 python=3.11 -y
 conda activate t2
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ### 3. Install Tasks Evaluator

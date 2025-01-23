@@ -10,6 +10,6 @@ base_model_name: llama3i8b
 #   - 'saved_models/llama3i8b/ai2arc/learnable_params.pt'
 
 reference_params_results:
-  - "ckpts/learnable_params/llama3_8b_instruct_gsm8k_svd_pg_mlp.pt"
-  - "ckpts/learnable_params/llama3_8b_instruct_mbpp_pro_svd_pg_mlp.pt"
-  - "ckpts/learnable_params/llama3_8b_instruct_gsm8k_svd_pg_mlp.pt"
+  - "/home/liukaiyuan/project/self-adaptive-llms/results/ckpy/gsm8k_policy_params_best_test_acc_0.7725549658832449.pt"
+  - "/home/liukaiyuan/project/self-adaptive-llms/results/ckpy/mbpp_policy_params_best_test_acc_0.6868686868686869.pt"
+  - "/home/liukaiyuan/project/self-adaptive-llms/results/ckpy/arc_policy_params_best_test_acc_0.8960437710437711.pt"

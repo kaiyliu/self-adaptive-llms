@@ -85,7 +85,7 @@ class Gsm8kTask(Task):
     def get_prompt(self, tokenizer, samples, ix, model_id):
         chat_template = self.model_to_template[model_id]
         context_msg = {"role": "system", "content": self.system_msg}
-        user_msg = {"role": "user", "content": samples["question"][ix]}
+        user_msg = {"role": "user", "content": samples["question"][ix]} if "question" in samples else {"role": "user", "content": samples[ix].problem}
         prompt = tokenizer.apply_chat_template(
             conversation=[context_msg, user_msg],
             chat_template=chat_template,
